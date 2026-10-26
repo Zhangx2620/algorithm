@@ -1,0 +1,14 @@
+# 编译产物
+*.exe
+*.o
+*.obj
+*.out
+
+# vscode
+.vscode/
+*.suo
+*.user
+
+# 临时文件
+*~
+*.tmp
