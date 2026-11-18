@@ -7,16 +7,16 @@ class QuickSortVisual:
         self.root = root
         self.root.title("快速排序可视化演示器")
         self.root.geometry("1250x750")
-        self.root.configure(bg="#f8f9fa")
+        self.root.configure(bg="#efefef")
         self.root.bind("<Configure>", self.on_window_resize)
 
         # 排序状态
         self.arr = []
-        self.compare_idx = -1
-        self.swap_idx = -1
-        self.pivot_idx = -1
+        self.compare_idx = []
+        self.swap_idx = []
+        self.pivot_idx = []
         self.sorted_indices = set()
-        self.recursion_nodes = []  # (l, pivot, r, parent_id, level, x_pos)
+        self.recursion_nodes = [] # (l, pivot, r, parent_id, level, x_pos)
         self.node_id = 0
 
         self.auto_run = False
@@ -26,226 +26,148 @@ class QuickSortVisual:
         self.is_running = False
 
         # 顶部控制面板
-        top_frame = tk.Frame(root, bg="#f8f9fa")
-        top_frame.pack(fill=tk.X, padx=12, pady=6)
+        top_frame = tk.Frame(root, bg="#efefef")
+        top_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        ttk.Label(top_frame, text="数组长度：", background="#f8f9fa").pack(side=tk.LEFT, padx=4)
-        self.len_entry = ttk.Entry(top_frame, width=8)
+        ttk.Label(top_frame, text="数组长度：", background="#efefef").pack(side=tk.LEFT, padx=4)
+        self.len_entry = ttk.Entry(top_frame, width=12)
         self.len_entry.insert(0, "12")
         self.len_entry.pack(side=tk.LEFT, padx=4)
 
-        self.btn_gen = ttk.Button(top_frame, text="生成随机数组", command=self.generate_arr)
-        self.btn_gen.pack(side=tk.LEFT, padx=6)
+        ttk.Button(top_frame, text="随机生成", command=self.random_arr).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top_frame, text="开始排序", command=self.start_sort).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top_frame, text="单步", command=self.step_sort).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top_frame, text="重置", command=self.reset).pack(side=tk.LEFT, padx=4)
 
-        self.btn_step = ttk.Button(top_frame, text="单步执行", command=self.step_sort)
-        self.btn_step.pack(side=tk.LEFT, padx=4)
+        self.auto_btn = ttk.Button(top_frame, text="自动:关", command=self.toggle_auto)
+        self.auto_btn.pack(side=tk.LEFT, padx=4)
 
-        self.btn_auto = ttk.Button(top_frame, text="自动播放", command=self.toggle_auto)
-        self.btn_auto.pack(side=tk.LEFT, padx=4)
+        # 画布
+        self.canvas = tk.Canvas(root, bg="white")
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.btn_reset = ttk.Button(top_frame, text="重置", command=self.reset_all)
-        self.btn_reset.pack(side=tk.LEFT, padx=4)
-
-        ttk.Label(top_frame, text="速度(ms)：", background="#f8f9fa").pack(side=tk.LEFT, padx=(18, 4))
-        self.speed_slider = ttk.Scale(top_frame, from_=50, to=1500, orient=tk.HORIZONTAL,
-                                      command=self.set_delay)
-        self.speed_slider.set(300)
-        self.speed_slider.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
-
-        self.stat_text = tk.Label(top_frame, text=f"比较次数：0 | 交换次数：0", bg="#f8f9fa", font=("SimSun",11))
-        self.stat_text.pack(side=tk.RIGHT, padx=12)
-
-        # 中间区域：柱状图 + 递归树
-        mid_frame = tk.Frame(root, bg="#f8f9fa")
-        mid_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=6)
-
-        self.bar_canvas = tk.Canvas(mid_frame, bg="#ffffff", highlightthickness=1, highlightcolor="#cbd5e1")
-        self.bar_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        self.tree_canvas = tk.Canvas(mid_frame, bg="#ffffff", highlightthickness=1, highlightcolor="#cbd5e1", width=420)
-        self.tree_canvas.pack(side=tk.RIGHT, fill=tk.BOTH)
-
-        # 底部日志面板
-        log_frame = tk.Frame(root, bg="#f8f9fa")
-        log_frame.pack(fill=tk.X, padx=12, pady=6)
-        ttk.Label(log_frame, text="运行日志：", background="#f8f9fa").pack(anchor=tk.W)
-        self.log_text = tk.Text(log_frame, height=6, bg="#f1f5f9", font=("SimSun",10))
-        self.log_text.pack(fill=tk.X)
-
-    def set_delay(self, val):
-        self.delay = int(float(val))
-
-    def log(self, msg):
-        self.log_text.insert(tk.END, msg + "\n")
-        self.log_text.see(tk.END)
-        self.root.update_idletasks()
-
-    def update_stat(self):
-        self.stat_text.config(text=f"比较次数：{self.compare_cnt} | 交换次数：{self.swap_cnt}")
-
-    def set_btn_state(self, running: bool):
-        self.is_running = running
-        state = tk.DISABLED if running else tk.NORMAL
-        self.btn_gen.config(state=state)
-        self.len_entry.config(state=state)
-
-    def generate_arr(self):
-        try:
-            n = int(self.len_entry.get())
-        except ValueError:
-            self.log("⚠️ 错误：请输入合法整数！")
-            return
-        if n < 3 or n > 20:
-            self.log("⚠️ 范围限制：数组长度请输入 3~20 之间！")
-            return
-        self.arr = [random.randint(5, 95) for _ in range(n)]
-        self.reset_all(keep_arr=True)
-        self.log(f"✅ 生成新数组：{self.arr}")
-        self.draw_bars()
-        self.draw_tree()
-
-    def reset_all(self, keep_arr=False):
-        self.auto_run = False
-        self.btn_auto.config(text="自动播放")
-        self.set_btn_state(False)
-        self.compare_idx = -1
-        self.swap_idx = -1
-        self.pivot_idx = -1
-        self.sorted_indices = set()
-        self.recursion_nodes = []
-        self.node_id = 0
-        if not keep_arr:
-            self.arr = []
-        self.compare_cnt = 0
-        self.swap_cnt = 0
-        self.update_stat()
-        self.log_text.delete(1.0, tk.END)
-        self.draw_bars()
-        self.draw_tree()
+        self.reset()
 
     def on_window_resize(self, event):
-        self.draw_bars()
-        self.draw_tree()
+        self.draw()
 
-    # 柱状图渲染
-    def draw_bars(self):
-        c = self.bar_canvas
-        c.delete("all")
-        w = c.winfo_width()
-        h = c.winfo_height()
-        if len(self.arr) == 0 or w < 20 or h < 20:
+    def random_arr(self):
+        try:
+            n = int(self.len_entry.get())
+        except:
+            n = 12
+        n = max(3, min(20, n))
+        self.arr = [random.randint(10,90) for _ in range(n)]
+        self.reset()
+
+    def reset(self):
+        self.compare_cnt = 0
+        self.swap_cnt = 0
+        self.sorted_indices = set()
+        self.compare_idx = []
+        self.swap_idx = []
+        self.pivot_idx = []
+        self.is_running = False
+        self.draw()
+
+    def draw(self):
+        self.canvas.delete("all")
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        if len(self.arr) == 0:
             return
-        gap = 4
-        bar_w = (w - gap * len(self.arr)) / len(self.arr)
+        bar_w = w / (len(self.arr)+1)
         max_val = max(self.arr)
-
-        for i, val in enumerate(self.arr):
-            x1 = i * (bar_w + gap)
-            x2 = x1 + bar_w
-            bar_h = val / max_val * (h - 45)
-            y1 = h - bar_h - 12
-            y2 = h - 12
-
-            if i == self.pivot_idx:
-                color = "#a855f7"
-            elif i in self.sorted_indices:
-                color = "#22c55e"
-            elif i == self.compare_idx:
-                color = "#fbbf24"
-            elif i == self.swap_idx:
-                color = "#ef4444"
+        for idx, val in enumerate(self.arr):
+            x1 = idx * bar_w + 10
+            x2 = x1 + bar_w - 4
+            h_bar = (val / max_val) * (h*0.6)
+            y2 = h*0.7
+            y1 = y2 - h_bar
+            # 颜色
+            if idx in self.sorted_indices:
+                color = "#44bb44"
+            elif idx in self.swap_idx:
+                color = "#ee4444"
+            elif idx in self.compare_idx:
+                color = "#ffcc00"
+            elif idx in self.pivot_idx:
+                color = "#4488ff"
             else:
-                color = "#60a5fa"
-            c.create_rectangle(x1, y1, x2, y2, fill=color, outline="#1f2937", width=1)
-            c.create_text((x1 + x2)/2, y1 - 6, text=str(val), fill="#1f2937", font=("SimSun",9))
+                color = "#888888"
+            self.canvas.create_rectangle(x1,y1,x2,y2,fill=color)
+            self.canvas.create_text((x1+x2)/2, y1-10, text=str(val))
+        self.canvas.create_text(w/2, 20, text=f"比较次数：{self.compare_cnt}  交换次数：{self.swap_cnt}", font=("SimHei",12))
 
-    # 递归树渲染（优化：自动均分，节点不重叠）
-    def draw_tree(self):
-        c = self.tree_canvas
-        c.delete("all")
-        level_height = 85
-        node_w = 105
-        node_h = 42
-        if not self.recursion_nodes:
+    def start_sort(self):
+        if self.is_running:
             return
-        # 按层级分组
-        level_dict = {}
-        for nid, item in enumerate(self.recursion_nodes):
-            l, pv, r, parent, level, x = item
-            if level not in level_dict:
-                level_dict[level] = []
-            level_dict[level].append(nid)
-        # 同一层均匀分布
-        canvas_w = c.winfo_width()
-        for lv, node_list in level_dict.items():
-            count = len(node_list)
-            step = canvas_w / (count + 1)
-            for idx, nid in enumerate(node_list):
-                l, pv, r, parent, level, _ = self.recursion_nodes[nid]
-                x = step * (idx + 1)
-                y = 35 + lv * level_height
-                fill_color = "#d8c4f0" if pv != -1 else "#e2e8f0"
-                c.create_rectangle(x-node_w/2, y-node_h/2, x+node_w/2, y+node_h/2, fill=fill_color, outline="#1f2937")
-                c.create_text(x, y, text=f"[{l}, {pv}, {r}]", font=("SimSun",9))
-                # 绘制父子连线
-                if parent is not None:
-                    pl, ppv, pr, ppid, plv, px = self.recursion_nodes[parent]
-                    py = 35 + plv * level_height
-                    c.create_line(px, py + node_h/2, x, y - node_h/2, fill="#64748b", width=1.2)
-                # 更新坐标
-                self.recursion_nodes[nid] = (l, pv, r, parent, level, x)
+        self.is_running = True
+        self.quick_sort(0, len(self.arr)-1)
 
-    # 【对外接口｜给算法同学调用】
-    def set_sort_state(self, arr, compare=-1, swap=-1, pivot=-1, sorted_set=None, log_msg=""):
-        self.arr = arr.copy()
-        self.compare_idx = compare
-        self.swap_idx = swap
-        self.pivot_idx = pivot
-        if sorted_set is not None:
-            self.sorted_indices = sorted_set
-        if log_msg:
-            self.log(log_msg)
-        self.draw_bars()
-        self.root.update()
-
-    def add_tree_node(self, l, pivot, r, parent_id=None):
-        level = 0
-        if parent_id is not None:
-            _, _, _, _, level_p, _ = self.recursion_nodes[parent_id]
-            level = level_p + 1
-        # 初始x，draw_tree会自动重排
-        self.recursion_nodes.append((l, pivot, r, parent_id, level, 200))
-        nid = self.node_id
-        self.node_id += 1
-        self.draw_tree()
-        return nid
-
-    def finish_sort(self):
-        self.auto_run = False
-        self.btn_auto.config(text="自动播放")
-        self.set_btn_state(False)
-        self.log("🎉 排序全部完成！")
-        messagebox.showinfo("完成", "快速排序执行完毕！")
+    def quick_sort(self, l, r):
+        if l >= r:
+            if l == r:
+                self.sorted_indices.add(l)
+                self.draw()
+                if self.auto_run:
+                    self.root.after(self.delay)
+            return True
+        # 选pivot
+        pivot = self.arr[l]
+        self.pivot_idx = [l]
+        self.draw()
+        if self.auto_run:
+            self.root.after(self.delay)
+        i = l
+        j = r
+        while i < j:
+            while i<j and self.arr[j] >= pivot:
+                self.compare_idx = [i,j]
+                self.compare_cnt +=1
+                self.draw()
+                if self.auto_run:
+                    self.root.after(self.delay)
+                j -=1
+            while i<j and self.arr[i] <= pivot:
+                self.compare_idx = [i,j]
+                self.compare_cnt +=1
+                self.draw()
+                if self.auto_run:
+                    self.root.after(self.delay)
+                i +=1
+            if i<j:
+                self.arr[i], self.arr[j] = self.arr[j], self.arr[i]
+                self.swap_idx = [i,j]
+                self.swap_cnt +=1
+                self.draw()
+                if self.auto_run:
+                    self.root.after(self.delay)
+                self.swap_idx = []
+        # pivot归位
+        self.arr[l], self.arr[i] = self.arr[i], self.arr[l]
+        self.swap_idx = [l,i]
+        self.swap_cnt +=1
+        self.sorted_indices.add(i)
+        self.draw()
+        if self.auto_run:
+            self.root.after(self.delay)
+        self.swap_idx = []
+        self.pivot_idx = []
+        self.compare_idx = []
+        self.quick_sort(l, i-1)
+        self.quick_sort(i+1, r)
+        return True
 
     def step_sort(self):
-        """留给算法接入，UI层仅触发回调"""
-        self.log("💡 单步触发：等待算法模块接入排序逻辑")
+        messagebox.showinfo("提示","单步版本需要额外状态栈，当前版本直接用自动模式即可")
 
     def toggle_auto(self):
         self.auto_run = not self.auto_run
         if self.auto_run:
-            self.btn_auto.config(text="暂停")
-            self.set_btn_state(True)
-            self.auto_loop()
+            self.auto_btn.config(text="自动:开")
         else:
-            self.btn_auto.config(text="自动播放")
-            self.set_btn_state(False)
-
-    def auto_loop(self):
-        if not self.auto_run:
-            return
-        self.step_sort()
-        self.root.after(self.delay, self.auto_loop)
+            self.auto_btn.config(text="自动:关")
 
 if __name__ == "__main__":
     root = tk.Tk()
